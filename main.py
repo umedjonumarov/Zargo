@@ -10,7 +10,7 @@ ID_INSTANCE = "7107601809"
 API_TOKEN = os.environ.get("GREEN_API_TOKEN", "")
 
 # OpenAI API
-OPENAI_API_KEY = os.environ.get("OPENAI_API_TOKEN", "")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 # Маҳсулотлар рўйхати
