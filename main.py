@@ -4,112 +4,58 @@ from openai import OpenAI
 import os
 import logging
 
-# Logging sozlash
+# Хатоларни кузатиш (Лог)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# Green API маълумотлари
+# --- СОЗЛАМАЛАР ---
 ID_INSTANCE = "7107601809"
 API_TOKEN = os.environ.get("GREEN_API_TOKEN", "")
 
-# Админ рақами (буюртмаларни қабул қилиш учун)
-ADMIN_PHONE = os.environ.get("ADMIN_PHONE", "992927909698")
+# РАҚАМЛАР
+BOT_PHONE = "79099885383"       # Ботнинг ўз рақами
+ADMIN_PHONE = "992927909698"    # Сизнинг шахсий рақамингиз
 
-# OpenAI API
+# OpenAI
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# Маҳсулотлар рўйхати
-PRODUCTS = """
-МАВЖУД МАҲСУЛОТЛАР:
-- Нон - 3 сомони
-- Тухум (10 дона) - 15 сомони
-- Сут (1л) - 8 сомони
-- Картошка (1кг) - 5 сомони
-- Пиёз (1кг) - 4 сомони
-- Сабзи (1кг) - 6 сомони
-- Помидор (1кг) - 10 сомони
-- Бодринг (1кг) - 8 сомони
-- Гўшт (1кг) - 80 сомони
-- Товуқ (1кг) - 35 сомони
-- Гуруч (1кг) - 12 сомони
-- Макарон (1кг) - 10 сомони
-- Ёғ (1л) - 25 сомони
-- Туз (1кг) - 3 сомони
-- Шакар (1кг) - 9 сомони
-- Чой (100г) - 15 сомони
-"""
-
+# Суҳбатлар тарихи
 conversations = {}
 
 def send_whatsapp(chatId, message):
-    """WhatsApp га хабар юбориш"""
-    if not API_TOKEN:
-        logger.error("GREEN_API_TOKEN бўш! Илтимос, муҳит ўзгарувчисини ўрнатинг.")
-        return {"error": "API_TOKEN бўш"}
-    
+    """WhatsApp га хабар юбориш функцияси"""
     url = f"https://api.green-api.com/waInstance{ID_INSTANCE}/sendMessage/{API_TOKEN}"
     payload = {"chatId": chatId, "message": message}
-    logger.info(f"WhatsApp хабар юборилмоқда: {chatId}")
-    response = requests.post(url, json=payload)
-    result = response.json()
-    logger.info(f"WhatsApp жавоб: {result}")
-    
-    if response.status_code != 200:
-        logger.error(f"WhatsApp хатолик: {response.status_code} - {result}")
-    
-    return result
+    try:
+        response = requests.post(url, json=payload)
+        return response.json()
+    except Exception as e:
+        logger.error(f"Хабар юборишда хато: {e}")
+        return None
 
-def send_order_to_admin(customer_phone, order_summary):
-    """Буюртмани админга юбориш"""
-    admin_message = f"🆕 ЯНГИ БУЮРТМА!\n\n"
-    admin_message += f"👤 Мижоз: {customer_phone}\n"
-    admin_message += f"📋 Буюртма тафсилотлари:\n{order_summary}\n"
-    admin_message += f"\n📞 Мижоз билан боғланинг: {customer_phone}"
-    
-    # Админ рақами учун @c.us қўшамиз
-    admin_chatId = f"{ADMIN_PHONE}@c.us"
-    logger.info(f"Админга хабар юборилмоқда: {admin_chatId}")
-    result = send_whatsapp(admin_chatId, admin_message)
-    logger.info(f"Админга хабар натижаси: {result}")
-    return result
-
-def get_order_summary(phone):
-    """Мижознинг буюртма тарихини олиш"""
+def get_order_history(phone):
+    """Мижознинг бутун буюртма тарихини йиғиш"""
     if phone not in conversations:
-        logger.warning(f"Мижоз учун суҳбат топилмади: {phone}")
-        return ""
+        return "Тарих топилмади."
     
-    # Фақат фойдаланувчи ва ассистент хабарларини олиш
-    summary = ""
+    history = ""
     for msg in conversations[phone]:
-        if msg["role"] in ["user", "assistant"]:
-            summary += f"{msg['role']}: {msg['content']}\n\n"
-    
-    logger.info(f"Буюртма тафсилотлари олинди, узунлиги: {len(summary)}")
-    return summary.strip()
+        role = "Мижоз" if msg["role"] == "user" else "Бот"
+        if msg["role"] != "system":
+            history += f"{role}: {msg['content']}\n"
+    return history
 
 def get_ai_response(phone, user_message):
+    """OpenAI дан жавоб олиш ва инструкцияни мажбурлаш"""
     if phone not in conversations:
         conversations[phone] = [
-            {"role": "system", "content": f"""Сен Zargo дўкони учун AI ёрдамчисан. 
-Мижозларга озиқ-овқат буюртма беришда ёрдам берасан.
-Зарзамин қишлоғи (Хужанд, Тожикистон) учун хизмат кўрсатасан.
-Тожик ёки ўзбек тилида гаплашасан.
-Қисқа ва дўстона жавоб бер.
-
-{PRODUCTS}
-
-Буюртма йиғилгач, мижоздан қуйидагиларни сўра:
-1. Манзил
-2. Телефон рақам
-3. Тўлов усули (нақд/карта)
-
-Буюртма тўлиқ тасдиқлангач (мижоз манзил, телефон ва тўлов усулини айтгач), 
-МИЖОЗГА ЖАВОБИНГНИНГ ОХИРИДА АЙНАН "Буюртмангизни қабул қилдик" деган сўзни ёз.
-Бу жуда муҳим!"""}
+            {"role": "system", "content": """Сен Zargo дўкони ёрдамчисисан. 
+            Мижоз маҳсулотларни танлаб, манзил, телефон ва тўлов турини айтганидан кейин, 
+            жавобингнинг энг охирида АЙНАН 'Буюртмангизни қабул қилдик' деган жумлани ёзишинг ШАРТ. 
+            Бу жумласиз буюртма базага тушмайди. Қисқа ва дўстона гаплаш."""}
         ]
     
     conversations[phone].append({"role": "user", "content": user_message})
@@ -118,53 +64,53 @@ def get_ai_response(phone, user_message):
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=conversations[phone],
-            max_tokens=500
+            temperature=0.7
         )
-        
         ai_text = response.choices[0].message.content
         conversations[phone].append({"role": "assistant", "content": ai_text})
         return ai_text
     except Exception as e:
-        # Хатолик бўлса, аввалги хабарни ўчириб ташлаймиз
-        if len(conversations[phone]) > 1:
-            conversations[phone].pop()  # охирги user хабарини ўчирамиз
-        return f"Узр, ҳозир жавоб бера олмаяпман. Илтимос, қайтадан ёзинг. (Хатолик: {str(e)})"
-
-@app.route('/', methods=['GET'])
-def home():
-    return "Zargo Bot ishlayapti!"
+        return f"Хатолик юз берди: {str(e)}"
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
     data = request.json
     
+    # Фақат янги келган хабарларни қайта ишлаймиз
     if data.get("typeWebhook") == "incomingMessageReceived":
-        phone = data["senderData"]["chatId"]
+        chatId = data["senderData"]["chatId"]
+        sender_number = data["senderData"]["sender"].split('@')[0]
         
-        # Агар хабар админ рақамидан келган бўлса, жавоб қайтармаслик (чексиз циклни олдини олиш)
-        if phone == f"{ADMIN_PHONE}@c.us":
-            return jsonify({"status": "ok"})
-        
+        # 1. БОТ ЎЗИГА-ЎЗИ ЖАВОБ БЕРМАСЛИГИ УЧУН (Loop prevention)
+        if sender_number == BOT_PHONE:
+            return jsonify({"status": "ignored"}), 200
+
         message_data = data.get("messageData", {})
         text_data = message_data.get("textMessageData", {})
         user_message = text_data.get("textMessage", "")
-        
+
         if user_message:
-            ai_response = get_ai_response(phone, user_message)
-            send_whatsapp(phone, ai_response)
+            # 2. Мижозга жавоб қайтариш
+            ai_response = get_ai_response(chatId, user_message)
+            send_whatsapp(chatId, ai_response)
             
-            # Агар бот буюртмани тасдиқлаган бўлса, админга хабар юбориш
-            if "Буюртмангизни қабул қилдик" in ai_response or "буюртмангизни қабул қилдик" in ai_response:
-                logger.info(f"Буюртма тасдиқланди, админга юборилмоқда: {phone}")
-                order_summary = get_order_summary(phone)
-                if order_summary:
-                    result = send_order_to_admin(phone, order_summary)
-                    logger.info(f"Админга юбориш натижаси: {result}")
-                else:
-                    logger.error(f"Буюртма тафсилотлари топилмади: {phone}")
-    
-    return jsonify({"status": "ok"})
+            # 3. БУЮРТМАНИ АНИҚЛАШ ВА АДМИНГА ЙЎНАЛТИРИШ
+            # Кичик ёки катта ҳарф билан ёзилганда ҳам ишлайдиган қилинди
+            trigger = "буюртмангизни қабул қилдик"
+            if trigger in ai_response.lower():
+                full_history = get_order_history(chatId)
+                admin_msg = (
+                    f"🚀 *ЯНГИ БУЮРТМА!*\n"
+                    f"📱 Мижоз: +{sender_number}\n"
+                    f"--------------------------\n"
+                    f"📝 *СУҲБАТ ТАФСИЛОТЛАРИ:*\n\n{full_history}"
+                )
+                
+                # Админ рақамига юбориш
+                send_whatsapp(f"{ADMIN_PHONE}@c.us", admin_msg)
+                logger.info(f"Буюртма админга (+{ADMIN_PHONE}) юборилди.")
+
+    return jsonify({"status": "ok"}), 200
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
