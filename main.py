@@ -2,6 +2,11 @@ from flask import Flask, request, jsonify
 import requests
 from openai import OpenAI
 import os
+import logging
+
+# Logging sozlash
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
@@ -10,7 +15,7 @@ ID_INSTANCE = "7107601809"
 API_TOKEN = os.environ.get("GREEN_API_TOKEN", "")
 
 # Админ рақами (буюртмаларни қабул қилиш учун)
-ADMIN_PHONE = "992927909698"
+ADMIN_PHONE = os.environ.get("ADMIN_PHONE", "992927909698")
 
 # OpenAI API
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
@@ -41,10 +46,21 @@ conversations = {}
 
 def send_whatsapp(chatId, message):
     """WhatsApp га хабар юбориш"""
+    if not API_TOKEN:
+        logger.error("GREEN_API_TOKEN бўш! Илтимос, муҳит ўзгарувчисини ўрнатинг.")
+        return {"error": "API_TOKEN бўш"}
+    
     url = f"https://api.green-api.com/waInstance{ID_INSTANCE}/sendMessage/{API_TOKEN}"
     payload = {"chatId": chatId, "message": message}
+    logger.info(f"WhatsApp хабар юборилмоқда: {chatId}")
     response = requests.post(url, json=payload)
-    return response.json()
+    result = response.json()
+    logger.info(f"WhatsApp жавоб: {result}")
+    
+    if response.status_code != 200:
+        logger.error(f"WhatsApp хатолик: {response.status_code} - {result}")
+    
+    return result
 
 def send_order_to_admin(customer_phone, order_summary):
     """Буюртмани админга юбориш"""
@@ -55,11 +71,15 @@ def send_order_to_admin(customer_phone, order_summary):
     
     # Админ рақами учун @c.us қўшамиз
     admin_chatId = f"{ADMIN_PHONE}@c.us"
-    return send_whatsapp(admin_chatId, admin_message)
+    logger.info(f"Админга хабар юборилмоқда: {admin_chatId}")
+    result = send_whatsapp(admin_chatId, admin_message)
+    logger.info(f"Админга хабар натижаси: {result}")
+    return result
 
 def get_order_summary(phone):
     """Мижознинг буюртма тарихини олиш"""
     if phone not in conversations:
+        logger.warning(f"Мижоз учун суҳбат топилмади: {phone}")
         return ""
     
     # Фақат фойдаланувчи ва ассистент хабарларини олиш
@@ -68,6 +88,7 @@ def get_order_summary(phone):
         if msg["role"] in ["user", "assistant"]:
             summary += f"{msg['role']}: {msg['content']}\n\n"
     
+    logger.info(f"Буюртма тафсилотлари олинди, узунлиги: {len(summary)}")
     return summary.strip()
 
 def get_ai_response(phone, user_message):
@@ -84,7 +105,11 @@ def get_ai_response(phone, user_message):
 Буюртма йиғилгач, мижоздан қуйидагиларни сўра:
 1. Манзил
 2. Телефон рақам
-3. Тўлов усули (нақд/карта)"""}
+3. Тўлов усули (нақд/карта)
+
+Буюртма тўлиқ тасдиқлангач (мижоз манзил, телефон ва тўлов усулини айтгач), 
+МИЖОЗГА ЖАВОБИНГНИНГ ОХИРИДА АЙНАН "Буюртмангизни қабул қилдик" деган сўзни ёз.
+Бу жуда муҳим!"""}
         ]
     
     conversations[phone].append({"role": "user", "content": user_message})
@@ -130,9 +155,13 @@ def webhook():
             
             # Агар бот буюртмани тасдиқлаган бўлса, админга хабар юбориш
             if "Буюртмангизни қабул қилдик" in ai_response or "буюртмангизни қабул қилдик" in ai_response:
+                logger.info(f"Буюртма тасдиқланди, админга юборилмоқда: {phone}")
                 order_summary = get_order_summary(phone)
                 if order_summary:
-                    send_order_to_admin(phone, order_summary)
+                    result = send_order_to_admin(phone, order_summary)
+                    logger.info(f"Админга юбориш натижаси: {result}")
+                else:
+                    logger.error(f"Буюртма тафсилотлари топилмади: {phone}")
     
     return jsonify({"status": "ok"})
 
