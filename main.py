@@ -89,15 +89,21 @@ def get_ai_response(phone, user_message):
     
     conversations[phone].append({"role": "user", "content": user_message})
     
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=conversations[phone],
-        max_tokens=500
-    )
-    
-    ai_text = response.choices[0].message.content
-    conversations[phone].append({"role": "assistant", "content": ai_text})
-    return ai_text
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=conversations[phone],
+            max_tokens=500
+        )
+        
+        ai_text = response.choices[0].message.content
+        conversations[phone].append({"role": "assistant", "content": ai_text})
+        return ai_text
+    except Exception as e:
+        # Хатолик бўлса, аввалги хабарни ўчириб ташлаймиз
+        if len(conversations[phone]) > 1:
+            conversations[phone].pop()  # охирги user хабарини ўчирамиз
+        return f"Узр, ҳозир жавоб бера олмаяпман. Илтимос, қайтадан ёзинг. (Хатолик: {str(e)})"
 
 @app.route('/', methods=['GET'])
 def home():
