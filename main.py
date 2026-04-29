@@ -9,6 +9,9 @@ app = Flask(__name__)
 ID_INSTANCE = "7107601809"
 API_TOKEN = os.environ.get("GREEN_API_TOKEN", "")
 
+# Админ рақами (буюртмаларни қабул қилиш учун)
+ADMIN_PHONE = "79099885383"
+
 # OpenAI API
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 client = OpenAI(api_key=OPENAI_API_KEY)
@@ -38,9 +41,31 @@ conversations = {}
 
 def send_whatsapp(phone, message):
     url = f"https://api.green-api.com/waInstance{ID_INSTANCE}/sendMessage/{API_TOKEN}"
-    payload = {"chatId": phone, "message": message}
+    payload = {"chatId": f"{phone}@c.us", "message": message}
     response = requests.post(url, json=payload)
     return response.json()
+
+def send_order_to_admin(customer_phone, order_summary):
+    """Буюртмани админга юбориш"""
+    admin_message = f"🆕 ЯНГИ БУЮРТМА!\n\n"
+    admin_message += f"👤 Мижоз: {customer_phone}\n"
+    admin_message += f"📋 Буюртма тафсилотлари:\n{order_summary}\n"
+    admin_message += f"\n📞 Мижоз билан боғланинг: {customer_phone}"
+    
+    return send_whatsapp(ADMIN_PHONE, admin_message)
+
+def get_order_summary(phone):
+    """Мижознинг буюртма тарихини олиш"""
+    if phone not in conversations:
+        return ""
+    
+    # Фақат фойдаланувчи ва ассистент хабарларини олиш
+    summary = ""
+    for msg in conversations[phone]:
+        if msg["role"] in ["user", "assistant"]:
+            summary += f"{msg['role']}: {msg['content']}\n\n"
+    
+    return summary.strip()
 
 def get_ai_response(phone, user_message):
     if phone not in conversations:
@@ -88,6 +113,12 @@ def webhook():
         if user_message:
             ai_response = get_ai_response(phone, user_message)
             send_whatsapp(phone, ai_response)
+            
+            # Агар бот буюртмани тасдиқлаган бўлса, админга хабар юбориш
+            if "Буюртмангизни қабул қилдик" in ai_response or "буюртмангизни қабул қилдик" in ai_response:
+                order_summary = get_order_summary(phone)
+                if order_summary:
+                    send_order_to_admin(phone, order_summary)
     
     return jsonify({"status": "ok"})
 
