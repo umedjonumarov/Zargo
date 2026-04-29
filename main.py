@@ -10,7 +10,7 @@ ID_INSTANCE = "7107601809"
 API_TOKEN = os.environ.get("GREEN_API_TOKEN", "")
 
 # Админ рақами (буюртмаларни қабул қилиш учун)
-ADMIN_PHONE = "79099885383"
+ADMIN_PHONE = "992927909698"
 
 # OpenAI API
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
@@ -115,6 +115,11 @@ def webhook():
     
     if data.get("typeWebhook") == "incomingMessageReceived":
         phone = data["senderData"]["chatId"]
+        
+        # Агар хабар админ рақамидан келган бўлса, жавоб қайтармаслик (чексиз циклни олдини олиш)
+        if phone == f"{ADMIN_PHONE}@c.us":
+            return jsonify({"status": "ok"})
+        
         message_data = data.get("messageData", {})
         text_data = message_data.get("textMessageData", {})
         user_message = text_data.get("textMessage", "")
