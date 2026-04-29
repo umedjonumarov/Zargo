@@ -39,9 +39,10 @@ PRODUCTS = """
 
 conversations = {}
 
-def send_whatsapp(phone, message):
+def send_whatsapp(chatId, message):
+    """WhatsApp га хабар юбориш"""
     url = f"https://api.green-api.com/waInstance{ID_INSTANCE}/sendMessage/{API_TOKEN}"
-    payload = {"chatId": f"{phone}@c.us", "message": message}
+    payload = {"chatId": chatId, "message": message}
     response = requests.post(url, json=payload)
     return response.json()
 
@@ -52,7 +53,9 @@ def send_order_to_admin(customer_phone, order_summary):
     admin_message += f"📋 Буюртма тафсилотлари:\n{order_summary}\n"
     admin_message += f"\n📞 Мижоз билан боғланинг: {customer_phone}"
     
-    return send_whatsapp(ADMIN_PHONE, admin_message)
+    # Админ рақами учун @c.us қўшамиз
+    admin_chatId = f"{ADMIN_PHONE}@c.us"
+    return send_whatsapp(admin_chatId, admin_message)
 
 def get_order_summary(phone):
     """Мижознинг буюртма тарихини олиш"""
